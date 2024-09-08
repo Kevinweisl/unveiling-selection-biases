@@ -66,16 +66,16 @@ def get_tasks():
 
 
 def preprocess_question(task_name, doc):
-    if task_name in ['arc_challenge', 'hellaswag', 'mathqa', 'openbookqa']:
+    if task_name in ['hellaswag']:
         doc['this_question'] = doc['query']
+    elif task_name in ['openbookqa']:
+        doc['this_question'] = doc['question_stem']
+    elif task_name in ['arc_challenge'] or task_name.startswith('mmlu_'):
+        doc['this_question'] = doc['question']
+    elif task_name in ['mathqa']:
+        doc['this_question'] = doc['Problem']
     elif task_name == 'winogrande':
         doc['this_question'] = doc['sentence']
-    elif task_name.startswith('hendrycksTest'):
-        pattern = r'(.*?)\n([A-G]\. [^\n]+)'
-        matches = re.findall(pattern, doc['query'], re.DOTALL)
-        for i, pair in enumerate(matches):
-            if i == 0:
-                doc['this_question'] = pair[0]
     elif task_name.startswith('bigbench'):
         doc['this_question'] = doc['input']
 
@@ -87,15 +87,16 @@ def preprocess_choices(task_name, doc):
     def check_start_with_alpha(choice):
         return re.match(r'^[A-G]\. ', choice)
 
-    if task_name in ['arc_challenge', 'hellaswag', 'mathqa', 'openbookqa']:
+    if task_name in ['hellaswag'] or task_name.startswith('mmlu_'):
         doc['this_choices'] = doc['choices']
+    elif task_name in ['arc_challenge', 'openbookqa']:
+        doc['this_choices'] = doc['choices']['text']
     elif task_name == 'winogrande':
         doc['this_choices'] = [doc['option1'], doc['option2']]
-    elif task_name.startswith('hendrycksTest'):
-        pattern = r'(.*?)\n([A-F]\. [^\n]+)'
-        matches = re.findall(pattern, doc['query'], re.DOTALL)
-        doc['this_choices'] = [pair[1][3:] for pair in matches if check_start_with_alpha(pair[1])]
-        print(doc['this_choices'])
+    elif task_name == 'mathqa':
+        pattern = r'([a-zA-Z])\s*\)\s*([^,]+)'
+        matches = re.findall(pattern, doc['options'])
+        doc['this_choices'] = [pair[1].strip() for pair in matches]
     elif task_name.startswith('bigbench'):
         doc['this_choices'] = list(doc['target_scores'].keys())
 
@@ -113,6 +114,15 @@ def process_ground_truth(task_name, doc):
                     raise RuntimeError('Multiple ground truth found')
     elif task_name == 'winogrande':
         doc['ground_truth'] = doc['this_choices'][int(doc['answer'])-1]
+    elif task_name.startswith('mmlu_'):
+        doc['ground_truth'] = doc['this_choices'][doc['answer']]
+    elif task_name in ['arc_challenge', 'openbookqa']:
+        doc['ground_truth'] = doc['choices']['text'][doc['choices']['label'].index(doc['answerKey'])]
+    elif task_name in ['mathqa']:
+        pattern = r'([a-zA-Z])\s*\)\s*([^,]+)'
+        matches = re.findall(pattern, doc['options'])
+        tokens = [pair[0] for pair in matches]
+        doc['ground_truth'] = doc['this_choices'][tokens.index(doc['correct'])]
     else:
         doc['ground_truth'] = doc['this_choices'][doc['gold']]
 
